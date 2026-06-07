@@ -1,0 +1,67 @@
+# AppProject — the security boundary for everything the underwriting agent
+# deploys. Restricts WHERE Applications can sync (which clusters/namespaces),
+# WHAT source repos are allowed, and WHICH resource kinds may be created.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: underwriting-agent
+  namespace: argocd
+  # Block accidental deletion of the project while child Apps still exist.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Saaf underwriting-assist agent (dev/staging/prod)
+
+  # Only this repo may be a source. No arbitrary Helm repos.
+  sourceRepos:
+    - https://github.com/<your-org>/saaf-underwriting-infra.git
+
+  # Only these namespaces, only on the named destination servers.
+  destinations:
+    - name: in-cluster
+      server: https://kubernetes.default.svc
+      namespace: uw-dev
+    - name: in-cluster
+      server: https://kubernetes.default.svc
+      namespace: uw-staging
+    - name: in-cluster
+      server: https://kubernetes.default.svc
+      namespace: uw-prod
+
+  # Cluster-scoped resources are NOT permitted from this project — the agent
+  # only ever creates namespaced objects. (Platform CRDs/controllers are owned
+  # by a separate platform project.)
+  clusterResourceWhitelist: []
+
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: ServiceAccount
+    - group: apps
+      kind: Deployment
+    - group: networking.k8s.io
+      kind: Ingress
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+    - group: policy
+      kind: PodDisruptionBudget
+    - group: keda.sh
+      kind: ScaledObject
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+    - group: secrets-store.csi.x-k8s.io
+      kind: SecretProviderClass
+    - group: monitoring.coreos.com
+      kind: ServiceMonitor
+
+  # Self-service: who can sync prod. Tie to your SSO groups.
+  roles:
+    - name: prod-syncer
+      description: May manually sync the prod Application
+      policies:
+        - p, proj:underwriting-agent:prod-syncer, applications, sync, underwriting-agent/underwriting-agent-prod, allow
+      groups:
+        - saaf:platform-oncall

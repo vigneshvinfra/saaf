@@ -1,0 +1,46 @@
+# staging — prod-shaped but smaller. Anthropic API path (exercises secret rotation).
+replicaCount: 2
+
+image:
+  # repository inherited from values.yaml (GHCR). CD bumps tag to the git SHA.
+  tag: ""
+
+config:
+  ENVIRONMENT: staging
+  LOG_LEVEL: INFO
+  LLM_PROVIDER: anthropic
+  AWS_REGION: us-east-1
+  S3_BUCKET: saaf-uw-staging-loan-docs
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability:4317
+
+secrets:
+  enabled: true
+  region: us-east-1
+  objects:
+    - arn: ""
+      envVar: DATABASE_URL
+    - arn: ""
+      envVar: ANTHROPIC_API_KEY
+
+ingress:
+  enabled: true
+  scheme: internal
+  host: agent.staging.internal.saaffinance.com
+  certificateArn: ""
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 65
+
+serviceMonitor:
+  enabled: true
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: underwriting-agent

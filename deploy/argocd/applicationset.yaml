@@ -1,0 +1,71 @@
+# ApplicationSet — fans out one Argo Application per environment from a single
+# definition. dev + staging auto-sync (self-healing); prod is manual so a human
+# approves the rollout (this is the prod gate, paired with the CI image-tag PR).
+#
+# Note on the conditional sync policy: ApplicationSet parses `spec.template`
+# into a typed Application struct, so Go `{{if}}` control flow can't live inside
+# it. The per-env "automated vs manual" difference is therefore expressed via
+# `templatePatch`, which is rendered as raw text (full Go templating) and
+# strategically merged onto the generated Application.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: underwriting-agent
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - env: dev
+            namespace: uw-dev
+            server: https://kubernetes.default.svc
+            autoSync: "true"
+          - env: staging
+            namespace: uw-staging
+            server: https://kubernetes.default.svc
+            autoSync: "true"
+          - env: prod
+            namespace: uw-prod
+            server: https://kubernetes.default.svc
+            autoSync: "false"
+  template:
+    metadata:
+      name: underwriting-agent-{{.env}}
+      labels:
+        env: "{{.env}}"
+    spec:
+      project: underwriting-agent
+      source:
+        repoURL: https://github.com/<your-org>/saaf-underwriting-infra.git
+        targetRevision: main
+        path: deploy/chart/underwriting-agent
+        helm:
+          releaseName: underwriting-agent
+          valueFiles:
+            - values.yaml
+            - values-{{.env}}.yaml
+      destination:
+        server: "{{.server}}"
+        namespace: "{{.namespace}}"
+      # Base policy applies to every env. Automated sync is patched in below
+      # only for the environments whose element sets autoSync=true.
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ApplyOutOfSyncOnly=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
+  templatePatch: |
+    {{- if eq .autoSync "true" }}
+    spec:
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+    {{- end }}

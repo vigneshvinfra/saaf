@@ -1,0 +1,21 @@
+# Keep the build context tiny — only ship what the wheel needs.
+.git
+.github
+terraform
+deploy
+docs
+scripts
+tests
+examples
+*.md
+!README.md
+.env
+.env.*
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.terraform
+*.tfstate*
+.DS_Store

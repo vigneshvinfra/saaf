@@ -1,0 +1,67 @@
+# prod — HA, Bedrock via PrivateLink (no internet egress for LLM calls),
+# manual ArgoCD sync (change is gated). 99.9% availability target.
+replicaCount: 3
+
+image:
+  # repository inherited from values.yaml (GHCR). CD bumps tag to the git SHA.
+  tag: ""
+
+config:
+  ENVIRONMENT: prod
+  LOG_LEVEL: INFO
+  # Bedrock keeps LLM traffic on the AWS network and IAM-auditable; no API key.
+  LLM_PROVIDER: bedrock
+  LLM_MODEL: anthropic.claude-sonnet-4-6-v1:0
+  AWS_REGION: us-east-1
+  S3_BUCKET: saaf-uw-prod-loan-docs
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability:4317
+
+# Bedrock needs no API key; only the DB URL is secret in prod.
+secrets:
+  enabled: true
+  region: us-east-1
+  objects:
+    - arn: ""
+      envVar: DATABASE_URL
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 768Mi
+  limits:
+    memory: 1.5Gi
+
+ingress:
+  enabled: true
+  scheme: internal
+  host: agent.internal.saaffinance.com
+  certificateArn: ""
+  sslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+
+hpa:
+  enabled: true
+  minReplicas: 3 # keep warm — cold-start tolerance is moderate but SLO is tight
+  maxReplicas: 40 # headroom for the 250 items/hr peak bursts (12-month target)
+  targetCPUUtilizationPercentage: 60
+
+pdb:
+  enabled: true
+  minAvailable: 2
+
+serviceMonitor:
+  enabled: true
+
+# Spread across AZs and don't co-locate replicas on one node.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: underwriting-agent
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: underwriting-agent

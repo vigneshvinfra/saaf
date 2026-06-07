@@ -1,0 +1,77 @@
+name: ci
+
+# Static quality gates that need no AWS account: lint, test, image-build gate,
+# render, validate, security-scan. Image publish + env promotion live in cd.yml
+# (GHCR).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: agent lint + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - name: ruff
+        run: ruff check src tests
+      - name: pytest
+        run: pytest -q
+
+  docker:
+    name: image build (gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # Build only — proves the Dockerfile builds on every PR/commit.
+      # Publishing to GHCR + promotion happen in cd.yml on push to main.
+      - name: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  helm:
+    name: helm lint + render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: lint + template every env
+        run: |
+          for env in dev staging prod; do
+            helm lint deploy/chart/underwriting-agent -f deploy/chart/underwriting-agent/values-$env.yaml
+            helm template ua deploy/chart/underwriting-agent -f deploy/chart/underwriting-agent/values-$env.yaml >/dev/null
+          done
+
+  terraform:
+    name: terraform fmt + validate + scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.12.2
+      - name: fmt + validate all roots
+        run: ./scripts/tf-validate-all.sh
+      - name: tflint
+        uses: terraform-linters/setup-tflint@v4
+      - run: tflint --recursive --chdir=terraform
+        continue-on-error: true
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform
+          soft_fail: true

@@ -1,0 +1,10 @@
+underwriting-agent ({{ .Values.config.ENVIRONMENT }}) deployed as release {{ .Release.Name }}.
+
+Image:    {{ .Values.image.repository }}:{{ include "agent.imageTag" . }}
+Scaling:  {{ if .Values.hpa.enabled }}HPA on CPU ({{ .Values.hpa.minReplicas }}..{{ .Values.hpa.maxReplicas }} replicas){{ else }}fixed {{ .Values.replicaCount }} replicas{{ end }}
+Ingress:  {{ if .Values.ingress.enabled }}{{ .Values.ingress.scheme }} ALB at https://{{ .Values.ingress.host }}{{ else }}disabled (use port-forward){{ end }}
+
+Smoke test:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "agent.name" . }} 8080:{{ .Values.service.port }} &
+  curl -s localhost:8080/healthz
+  curl -s -XPOST localhost:8080/v1/items/process -H 'content-type: application/json' -d @examples/sample_loan.json | jq

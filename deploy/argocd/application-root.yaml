@@ -1,0 +1,33 @@
+# Root "app of apps" — the single Application you bootstrap by hand. It makes
+# Argo CD manage the AppProject + ApplicationSet in this directory declaratively,
+# so after this is applied, all further changes flow through git (no kubectl).
+#
+# Bootstrap once (from a machine with cluster admin, e.g. the SSM bastion):
+#   kubectl apply -n argocd -f deploy/argocd/application-root.yaml
+#
+# It intentionally syncs the `deploy/argocd` directory but excludes itself.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: underwriting-agent-bootstrap
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/<your-org>/saaf-underwriting-infra.git
+    targetRevision: main
+    path: deploy/argocd
+    directory:
+      recurse: false
+      exclude: application-root.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

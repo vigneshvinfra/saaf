@@ -1,0 +1,14 @@
+apiVersion: v2
+name: underwriting-agent
+description: Saaf Finance underwriting-assist agent — FastAPI LLM service on EKS
+type: application
+
+# Chart version is bumped when the chart changes.
+version: 0.1.0
+
+# appVersion tracks the agent image. CI overrides image.tag with the git SHA;
+# this is the human-readable default fallback.
+appVersion: "0.1.0"
+
+maintainers:
+  - name: Saaf Platform / DevOps

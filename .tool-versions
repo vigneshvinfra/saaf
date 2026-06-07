@@ -1,0 +1,4 @@
+terraform 1.12.2
+python 3.11.9
+helm 3.16.3
+kubectl 1.32.0

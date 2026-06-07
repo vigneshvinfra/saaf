@@ -1,0 +1,126 @@
+# Default values for the underwriting-agent chart.
+# Per-environment overrides live in values-<env>.yaml and are layered on top
+# by ArgoCD (one Application per env) or `helm -f`.
+
+image:
+  # Single GHCR registry for every env. CD bumps only image.tag per env.
+  repository: ghcr.io/vigneshvinfra/underwriting-agent
+  tag: ""
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+# ServiceAccount the pods run as. EKS Pod Identity (Terraform module
+# `agent-identity`) binds a least-privilege IAM role to this exact
+# namespace + name — so NO IRSA annotation is needed here.
+serviceAccount:
+  create: true
+  name: underwriting-agent
+  annotations: {}
+
+# Non-secret configuration -> rendered into a ConfigMap, loaded via envFrom.
+# These are the agent's env vars (see src/agent/config.py).
+config:
+  ENVIRONMENT: dev
+  LOG_LEVEL: INFO
+  LLM_PROVIDER: mock # anthropic | bedrock | mock
+  LLM_MODEL: claude-sonnet-4-6
+  AWS_REGION: us-east-1
+  S3_BUCKET: ""
+  SES_FROM_ADDRESS: loans@saaffinance.com
+  OTEL_SERVICE_NAME: underwriting-agent
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+
+# Secret material via the Secrets Store CSI driver (AWS Secrets Manager).
+# Synced into a Kubernetes Secret consumed by the pod via envFrom.
+# Disabled locally (kind) where the mock LLM path needs no credentials.
+secrets:
+  enabled: false
+  region: us-east-1
+  # Each entry: { arn: <secretsmanager arn>, envVar: <ENV NAME> }
+  # e.g. DATABASE_URL and ANTHROPIC_API_KEY come from Terraform `secrets` outputs.
+  objects: []
+  k8sSecretName: underwriting-agent-secrets
+
+# LLM-wait pods are I/O bound — request modest CPU, NO CPU limit (avoid
+# throttling a pod that is mostly blocked on the model API), cap memory.
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+
+service:
+  port: 80
+  targetPort: 8080
+
+# Internal ALB via AWS Load Balancer Controller. TLS 1.2+ enforced by the
+# listener policy. Disabled locally.
+ingress:
+  enabled: true
+  className: alb
+  scheme: internal
+  host: ""
+  certificateArn: ""
+  sslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+  annotations: {}
+
+# The agent is a synchronous HTTP service (POST /v1/items/process), so it scales
+# on request load. We use a standard HPA on CPU. The two daily bursts (250
+# items/hr at the 12-month target) are small in absolute terms; HPA headroom +
+# Karpenter node provisioning absorb them. If arrival ever outgrows synchronous
+# serving, the evolution is to front the service with SQS + a queue-depth scaler
+# — see docs/DESIGN.md. We deliberately do NOT do that now: it would require
+# building a queue consumer, and our job is to deploy/operate the agent as
+# shipped, not to change how it is invoked.
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 65
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# Default-deny egress except the dependencies the agent actually needs.
+networkPolicy:
+  enabled: true
+
+# Prometheus scrape (kube-prometheus-stack). Off where the CRD is absent.
+serviceMonitor:
+  enabled: false
+  interval: 30s
+
+probes:
+  liveness:
+    path: /healthz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readiness:
+    # Readiness gates on Postgres + S3 connectivity (via /readyz).
+    path: /readyz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Spread across AZs/nodes — populated in prod values.
+topologySpreadConstraints: []
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+podAnnotations: {}

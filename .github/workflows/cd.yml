@@ -1,0 +1,150 @@
+name: cd
+
+# Continuous delivery — GHCR end to end. CI's job ends at "a scanned image is in
+# GHCR and the desired tag is in git"; Argo CD reconciles the cluster from git.
+#
+#   push to main      -> build + push (GHCR) -> Trivy scan -> bump values-dev.yaml (auto)
+#   workflow_dispatch -> promote an existing GHCR tag into values-prod.yaml (approval gated)
+#
+# No AWS/OIDC needed: GHCR auth uses the built-in GITHUB_TOKEN.
+
+on:
+  push:
+    branches: [main]
+    # The promote step commits a values bump; ignore those paths so it doesn't
+    # rebuild/loop. Image rebuilds come from src/, Dockerfile, pyproject only.
+    paths-ignore:
+      - "deploy/**"
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "GHCR image tag (git SHA) to promote to prod"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/underwriting-agent
+
+jobs:
+  build-push:
+    name: build + push image (GHCR) + scan
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to GHCR
+      security-events: write # upload Trivy SARIF
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: echo "tag=${GITHUB_SHA::12}" >>"$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - name: log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build + push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          provenance: true
+          sbom: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: scan image (Trivy)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+
+  promote-dev:
+    name: promote -> dev (auto)
+    if: github.event_name == 'push'
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mikefarah/yq@v4
+      - name: bump image tag in values-dev.yaml
+        run: |
+          set -euo pipefail
+          f=deploy/chart/underwriting-agent/values-dev.yaml
+          yq -i '.image.tag = "${{ needs.build-push.outputs.tag }}"' "$f"
+
+          if git diff --quiet "$f"; then
+            echo "values-dev.yaml already at ${{ needs.build-push.outputs.tag }}, nothing to commit."
+            exit 0
+          fi
+          # Scope guard: refuse to push if anything but the dev tag line changed.
+          CHANGED=$(git diff --name-only)
+          if [ "$CHANGED" != "$f" ]; then
+            echo "Unexpected changes, refusing to push:"; echo "$CHANGED"; exit 1
+          fi
+
+          git config user.name  "saaf-ci"
+          git config user.email "ci@saaffinance.com"
+          git commit -am "ci(dev): bump agent image to ${{ needs.build-push.outputs.tag }} [skip ci]"
+          git pull --rebase origin main
+          git push
+
+  promote-prod:
+    name: promote -> prod (approval gated)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # GitHub Environment "prod" carries required reviewers — the human gate.
+    # Argo CD then waits for a manual Sync (the second gate).
+    environment: prod
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: verify image exists in GHCR
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker manifest inspect "${{ env.IMAGE }}:${{ inputs.tag }}" >/dev/null
+          echo "Verified ${{ env.IMAGE }}:${{ inputs.tag }} is present in GHCR."
+      - uses: mikefarah/yq@v4
+      - name: bump image tag in values-prod.yaml
+        run: |
+          set -euo pipefail
+          f=deploy/chart/underwriting-agent/values-prod.yaml
+          yq -i '.image.tag = "${{ inputs.tag }}"' "$f"
+          git diff "$f"
+          git config user.name  "saaf-ci"
+          git config user.email "ci@saaffinance.com"
+          git commit -am "ci(prod): promote agent image ${{ inputs.tag }} [skip ci]" || echo "no change"
+          git pull --rebase origin main
+          git push
