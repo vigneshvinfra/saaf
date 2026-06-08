@@ -46,7 +46,7 @@ pie title $/item at target volume (~$0.12)
 
 ## Levers if we needed to cut further
 - **Non-prod:** spot system nodes + Karpenter consolidation + single NAT + small
-  single-AZ RDS (already configured for dev/staging).
+  single-AZ RDS (already configured for dev).
 - **Prod fixed cost:** Graviton RDS (already r6g), single-NAT if the AZ-HA
   trade-off is acceptable, Savings Plans / Reserved for the steady system pool.
 - **LLM:** prompt-caching and right-sized model per item-category; cheaper model

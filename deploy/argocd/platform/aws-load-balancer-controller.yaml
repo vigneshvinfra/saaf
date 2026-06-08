@@ -1,0 +1,39 @@
+# AWS Load Balancer Controller — provisions the internal ALB the agent's Ingress.
+#
+# Substitute <CLUSTER_NAME> and <AWS_REGION> from `terraform output`
+# (stack outputs: cluster_name, region). Pin targetRevision to a current release.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-load-balancer-controller
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://aws.github.io/eks-charts
+    chart: aws-load-balancer-controller
+    targetRevision: 1.8.1
+    helm:
+      releaseName: aws-load-balancer-controller
+      values: |
+        clusterName: <CLUSTER_NAME>
+        region: <AWS_REGION>
+        # vpcId is auto-discovered from instance metadata if omitted.
+        serviceAccount:
+          create: true
+          name: aws-load-balancer-controller   # must match the Pod Identity association
+        enableServiceMutatorWebhook: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true

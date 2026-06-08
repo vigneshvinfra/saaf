@@ -1,10 +1,4 @@
 # Least-privilege identity for the agent pods, delivered via EKS Pod Identity.
-# Every statement is scoped to a specific resource ARN — no "*" resources, no
-# service-wide grants. This is the service identity the compliance section calls
-# for: it can read borrower docs, append to the audit log, key idempotency
-# writes, read its own secrets, invoke exactly the LLM it needs, and send mail
-# only from the verified address — nothing else.
-
 resource "aws_iam_role" "agent" {
   name_prefix          = "${var.name}-agent-"
   permissions_boundary = var.permissions_boundary

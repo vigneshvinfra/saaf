@@ -1,0 +1,39 @@
+# App-of-apps for the cluster platform layer. The root bootstrap Application
+# (application-root.yaml) picks this up from deploy/argocd/, and THIS app then
+# manages the child Applications under deploy/argocd/platform/ — one per
+# controller. That makes "installed via the platform layer" actually true in
+# git instead of a manual helm install.
+#
+# Order of operations on a fresh cluster:
+#   1. Bootstrap Argo CD (out-of-band) + apply application-root.yaml
+#   2. Root app creates this app + the `platform` AppProject
+#   3. This app installs Karpenter / LBC / Secrets Store CSI / kube-prometheus
+#   4. The agent ApplicationSet then has every controller its chart depends on
+#
+# Uses `project: default` (like application-root) because an app-of-apps creates
+# Argo *Application* objects in the argocd namespace; the child apps themselves
+# run under `project: platform`.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/<your-org>/saaf-underwriting-infra.git
+    targetRevision: main
+    path: deploy/argocd/platform
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

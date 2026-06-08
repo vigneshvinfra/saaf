@@ -1,11 +1,5 @@
 # Karpenter module — AWS-side wiring only (IAM controller role via Pod Identity,
-# node IAM role + instance profile, and the spot-interruption SQS queue Karpenter
-# drains to gracefully cordon/drain reclaimed nodes).
-#
-# The Karpenter controller (Helm) and the NodePool/EC2NodeClass CRs are
-# delivered via GitOps — see deploy/platform/. This split keeps Terraform
-# validate-clean with only the AWS provider and matches the house pattern of
-# not running Helm from Terraform.
+# node IAM role + instance profile).
 
 module "karpenter" {
   source  = "terraform-aws-modules/eks/aws//modules/karpenter"

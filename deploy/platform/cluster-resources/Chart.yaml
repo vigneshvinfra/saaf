@@ -1,0 +1,10 @@
+apiVersion: v2
+name: cluster-resources
+description: >-
+  Cluster custom resources that depend on the platform controllers — the
+  Karpenter NodePool/EC2NodeClass and the agent's PrometheusRule. Delivered by
+  the platform app-of-apps AFTER the controllers (Argo sync-wave 1) so the CRDs
+  they rely on already exist. Values come from `terraform output`.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

@@ -1,12 +1,5 @@
 name: cd
-
-# Continuous delivery — GHCR end to end. CI's job ends at "a scanned image is in
-# GHCR and the desired tag is in git"; Argo CD reconciles the cluster from git.
-#
-#   push to main      -> build + push (GHCR) -> Trivy scan -> bump values-dev.yaml (auto)
 #   workflow_dispatch -> promote an existing GHCR tag into values-prod.yaml (approval gated)
-#
-# No AWS/OIDC needed: GHCR auth uses the built-in GITHUB_TOKEN.
 
 on:
   push:

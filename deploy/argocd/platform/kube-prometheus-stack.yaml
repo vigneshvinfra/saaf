@@ -1,0 +1,55 @@
+# kube-prometheus-stack — the Prometheus Operator (+ Prometheus, Alertmanager)
+# that provides the ServiceMonitor / PrometheusRule CRDs the agent depends on
+# (deploy/chart/.../servicemonitor.yaml + the agent PrometheusRule, the latter
+# delivered by the cluster-resources app at sync-wave 1). Without the operator
+# those CRDs don't exist and the agent's monitoring no-ops.
+#
+# The selector overrides make the operator pick up ServiceMonitors/Rules that
+# DON'T carry the chart's release label (the agent's ServiceMonitor lives in the
+# uw-* namespaces). releaseName stays `kube-prometheus-stack` to match the rule's
+# `release:` label.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 65.5.1
+    helm:
+      releaseName: kube-prometheus-stack
+      values: |
+        fullnameOverride: kube-prometheus-stack
+        grafana:
+          enabled: false        # lean: alerts -> Alertmanager; enable for dashboards
+        prometheus:
+          prometheusSpec:
+            retention: 15d
+            # Discover the agent's ServiceMonitor/Rule across namespaces, not just
+            # those labelled with this chart's release.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true     # large operator CRDs exceed the annotation limit
+    retry:
+      limit: 5                   # absorb the first-sync CRD-then-CR ordering race
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 3m

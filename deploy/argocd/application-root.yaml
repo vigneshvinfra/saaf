@@ -1,11 +1,8 @@
-# Root "app of apps" — the single Application you bootstrap by hand. It makes
-# Argo CD manage the AppProject + ApplicationSet in this directory declaratively,
-# so after this is applied, all further changes flow through git (no kubectl).
+# Root "app of apps" — the single Application you bootstrap by hand. 
 #
 # Bootstrap once (from a machine with cluster admin, e.g. the SSM bastion):
 #   kubectl apply -n argocd -f deploy/argocd/application-root.yaml
-#
-# It intentionally syncs the `deploy/argocd` directory but excludes itself.
+
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

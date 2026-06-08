@@ -1,6 +1,5 @@
 # EKS module — control plane + system node group, following the established
-# pattern: EKS Pod Identity (not legacy IRSA annotations), KMS-encrypted control
-# plane logs + secrets, private API endpoint. The small managed node group hosts
+# pattern: EKS Pod Identity, KMS-encrypted control plane logs + secrets, private API endpoint. 
 # system addons + Karpenter; Karpenter then provisions the workload nodes.
 
 data "aws_caller_identity" "current" {}
@@ -75,7 +74,7 @@ module "eks" {
   cluster_endpoint_public_access       = var.endpoint_public_access
   cluster_endpoint_public_access_cidrs = var.endpoint_public_access_cidrs
 
-  enable_irsa         = true
+  enable_irsa         = false
   authentication_mode = "API"
 
   enable_cluster_creator_admin_permissions = true
@@ -130,9 +129,6 @@ module "eks" {
 
 # Tag private subnets so Karpenter's EC2NodeClass can discover them by tag.
 resource "aws_ec2_tag" "karpenter_subnets" {
-  # Key by index: subnet ids come from the VPC created in this same apply, so
-  # they're unknown at plan time and can't be for_each keys. The subnet count
-  # (az_count) is statically known, which is all the for expression needs.
   for_each    = { for idx, id in var.private_subnet_ids : idx => id }
   resource_id = each.value
   key         = "karpenter.sh/discovery"

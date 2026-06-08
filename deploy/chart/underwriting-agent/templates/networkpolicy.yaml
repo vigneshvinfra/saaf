@@ -36,9 +36,9 @@ spec:
       ports:
         - port: 5432
           protocol: TCP
-    # HTTPS to AWS service endpoints (S3/DynamoDB/SES/Bedrock/Secrets Manager)
-    # and the Anthropic API in non-prod. Egress is further constrained at the
-    # VPC/SG/endpoint-policy layer in Terraform.
+    # HTTPS to AWS service endpoints (S3/DynamoDB/Secrets Manager/STS/KMS/Bedrock),
+    # the GHCR registry, and the Anthropic API in non-prod. Egress is further
+    # constrained at the VPC/SG/endpoint-policy layer in Terraform.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0

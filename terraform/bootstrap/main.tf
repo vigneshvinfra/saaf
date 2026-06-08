@@ -1,9 +1,8 @@
 # ---------------------------------------------------------------------------
 # Remote state bootstrap
 #
-# Chicken-and-egg: this is the one Terraform config that uses a *local* backend,
-# because it CREATES the S3 bucket + DynamoDB table every other environment uses
-# as its remote backend. Apply this once per AWS account, commit the resulting
+# Terraform config that uses a *local* backend, because it CREATES the S3 bucket + DynamoDB table
+# every other environment uses as its remote backend. Apply this once per AWS account, commit the resulting
 # bucket/table names into each environment's backend.tf, then never touch it.
 #
 #   cd terraform/bootstrap && terraform init && terraform apply
@@ -22,8 +21,6 @@ terraform {
       version = "~> 5.0"
     }
   }
-  # Local backend on purpose — see header. The state for THIS config is small
-  # and can live in the repo operator's hands / a sealed location.
   backend "local" {}
 }
 

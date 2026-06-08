@@ -1,0 +1,32 @@
+# Values for the cluster-resources chart. The two REQUIRED fields come straight
+# from `terraform output` and replace the old ${CLUSTER_NAME}/${KARPENTER_NODE_ROLE}
+# placeholders that Argo couldn't substitute.
+
+# REQUIRED — stack output `cluster_name`. Also the value of the
+# `karpenter.sh/discovery` tag on subnets + node SG (set by the eks/karpenter
+# modules), which the EC2NodeClass selects on.
+clusterName: ""
+
+# REQUIRED — stack output `karpenter_node_role_name`. The IAM role Karpenter
+# nodes assume.
+karpenterNodeRole: ""
+
+# ----- Karpenter NodePool / EC2NodeClass -----------------------------------
+karpenter:
+  cpuLimit: "200" # hard ceiling on total provisioned vCPU for the agent pool
+  capacityTypes: # prefer spot, fall back to on-demand under pressure
+    - spot
+    - on-demand
+  instanceCategories: ["c", "m", "r"]
+  minInstanceGeneration: "5" # operator Gt -> gen 6+
+  expireAfter: 336h # recycle nodes ~14d so they stay patched
+  consolidateAfter: 1m
+  rootVolumeSizeGi: 30
+
+# ----- PrometheusRule -------------------------------------------------------
+prometheus:
+  # Must match the kube-prometheus-stack operator's rule selector release label.
+  releaseLabel: kube-prometheus-stack
+  p95LatencyMillis: 5000 # p95 end-to-end SLO (< 5s)
+  llmErrorRatio: 0.05 # page if >5% of requests 502 (LLM call failed)
+  runbookUrl: "https://github.com/<your-org>/saaf-underwriting-infra/blob/main/docs/RUNBOOK.md"

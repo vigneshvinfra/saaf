@@ -15,7 +15,7 @@ One of:
 - `AgentP95LatencyHigh` — p95 end-to-end > 5s for 10m (SLO breach).
 - `AgentLLMErrorRateHigh` — >5% of requests return 502 (LLM call failed) for 5m.
 
-(Both defined in `deploy/platform/monitoring/prometheusrule.yaml`.)
+(Both defined in `deploy/platform/cluster-resources/templates/prometheus-rule.yaml`.)
 
 ## 2. Impact
 

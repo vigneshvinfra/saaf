@@ -1,6 +1,5 @@
-# Network module — VPC + subnets + NAT + the VPC endpoints that keep the
-# agent's AWS/Bedrock traffic on the AWS backbone (no internet egress for the
-# sensitive paths). Wraps the well-maintained terraform-aws-modules/vpc.
+# Network module — VPC + subnets + NAT + the VPC endpoints that keep the agent's AWS/Bedrock traffic 
+# on the AWS backbone (no internet egress for the sensitive paths).
 
 data "aws_availability_zones" "available" {
   state = "available"
@@ -12,33 +11,36 @@ data "aws_caller_identity" "current" {}
 locals {
   azs = slice(data.aws_availability_zones.available.names, 0, var.az_count)
 
-  # /24 per subnet, mirroring the established layout:
-  #   private 10.x.1-3   nodes (NAT egress)
-  #   intra   10.x.51-53 control-plane ENIs + interface endpoints (no egress)
-  #   public  10.x.101-3 load balancers
-  private_subnets = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 8, i + 1)]
-  intra_subnets   = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 8, i + 51)]
-  public_subnets  = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 8, i + 101)]
+  # Network prefix from the VPC /16 CIDR: "10.10.0.0/16" -> "10.10".
+  # Assumes a /16 base with /24 subnets (the fixed layout below).
+  vpc_prefix = join(".", slice(split(".", var.vpc_cidr), 0, 2))
 
-  # Interface endpoints that the agent + platform need. Gateway endpoints
-  # (S3, DynamoDB) are handled separately (free, route-table based).
+  # One /24 per AZ in each tier; the third octet encodes tier + AZ index:
+  #   private 10.x.1-3    nodes (NAT egress)
+  #   intra   10.x.51-53  control-plane ENIs + interface endpoints (no egress)
+  #   public  10.x.101-3  load balancers
+  private_subnets = [for i in range(var.az_count) : "${local.vpc_prefix}.${1 + i}.0/24"]
+  intra_subnets   = [for i in range(var.az_count) : "${local.vpc_prefix}.${51 + i}.0/24"]
+  public_subnets  = [for i in range(var.az_count) : "${local.vpc_prefix}.${101 + i}.0/24"]
+
+  # Interface endpoints that the agent actually uses. The S3 gateway endpoint
+  # is handled separately (free, route-table based).
+  #   secretsmanager — Secrets Store CSI reads DATABASE_URL / ANTHROPIC_API_KEY
+  #   sts            — Pod Identity credential vending (AssumeRole)
+  #   kms            — decrypt for S3 SSE-KMS and Secrets Manager
+  # Container images come from GHCR over NAT
   interface_endpoints = toset(concat([
-    "ecr.api",
-    "ecr.dkr",
     "secretsmanager",
-    "logs",
-    "monitoring",
     "sts",
     "kms",
-    "email-smtp", # SES outbound (borrower email)
     ], var.enable_bedrock_endpoint ? [
-    "bedrock-runtime",
+    "bedrock-runtime", # prod LLM calls stay on the AWS backbone
   ] : []))
 }
 
-# Not every interface-endpoint service is offered in every AZ (e.g. SES
-# email-smtp). Look up each service's supported AZs so we only place its
-# endpoint in subnets that can actually host it.
+# Not every interface-endpoint service is offered in every AZ. Look up each
+# service's supported AZs so we only place its endpoint in subnets that can
+# actually host it.
 data "aws_vpc_endpoint_service" "interface" {
   for_each = local.interface_endpoints
 
@@ -63,17 +65,14 @@ module "vpc" {
   enable_dns_hostnames = true
   enable_dns_support   = true
 
-  # Subnet discovery tags for the AWS Load Balancer Controller.
-  public_subnet_tags  = { "kubernetes.io/role/elb" = 1 }
+  # Subnet discovery tag for the AWS Load Balancer Controller (internal ALB).
   private_subnet_tags = { "kubernetes.io/role/internal-elb" = 1 }
 
-  # VPC flow logs -> CloudWatch (network forensics / audit). KMS-encrypted when
-  # a key is supplied by the environment.
+  # VPC flow logs -> CloudWatch (network forensics / audit).
   enable_flow_log                                 = var.enable_flow_logs
   create_flow_log_cloudwatch_iam_role             = var.enable_flow_logs
   create_flow_log_cloudwatch_log_group            = var.enable_flow_logs
   flow_log_cloudwatch_log_group_retention_in_days = var.flow_logs_retention_days
-  flow_log_cloudwatch_log_group_kms_key_id        = var.kms_key_arn
 
   tags = var.tags
 }
@@ -104,22 +103,14 @@ resource "aws_security_group" "endpoints" {
   tags = var.tags
 }
 
-# Gateway endpoints — S3 (borrower docs + audit) and DynamoDB (idempotency).
-# Route-table based, free, and keep this traffic entirely off the internet.
+# Gateway endpoint — S3 (borrower docs + audit). Route-table based, free, and
+# keeps this traffic entirely off the internet.
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = module.vpc.vpc_id
   service_name      = "com.amazonaws.${data.aws_region.current.name}.s3"
   vpc_endpoint_type = "Gateway"
   route_table_ids   = concat(module.vpc.private_route_table_ids, module.vpc.intra_route_table_ids)
   tags              = merge(var.tags, { Name = "${var.name}-s3" })
-}
-
-resource "aws_vpc_endpoint" "dynamodb" {
-  vpc_id            = module.vpc.vpc_id
-  service_name      = "com.amazonaws.${data.aws_region.current.name}.dynamodb"
-  vpc_endpoint_type = "Gateway"
-  route_table_ids   = concat(module.vpc.private_route_table_ids, module.vpc.intra_route_table_ids)
-  tags              = merge(var.tags, { Name = "${var.name}-dynamodb" })
 }
 
 # Interface endpoints — placed in the intra subnets, private DNS enabled so the
@@ -132,8 +123,8 @@ resource "aws_vpc_endpoint" "interface" {
   vpc_endpoint_type = "Interface"
 
   # Only the intra subnets whose AZ is in the service's supported set. Skips
-  # AZs where the service isn't offered (e.g. email-smtp), which otherwise
-  # fails CreateVpcEndpoint with InvalidParameter.
+  # AZs where the service isn't offered, which otherwise fails
+  # CreateVpcEndpoint with InvalidParameter.
   subnet_ids = [
     for az, subnet_id in zipmap(local.azs, module.vpc.intra_subnets) :
     subnet_id

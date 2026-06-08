@@ -7,8 +7,8 @@ about *deploying and operating* it safely in a regulated (financial-services)
 environment.
 
 > This is a take-home build. It is designed to be **statically valid and
-> secure** (`terraform validate` + `tfsec` clean, `pytest` green, and the agent
-> genuinely deploys to a local Kubernetes cluster via the shipped Helm chart).
+> secure** (`terraform validate` + `tfsec` clean, `pytest` green; the agent ships
+> via the Helm chart, rendered and linted in CI for every environment).
 > It is **not** intended to `apply` against a real AWS account — that is out of
 > scope per the brief. Reasoning lives in [`docs/`](docs/).
 
@@ -39,11 +39,10 @@ Full diagram + reasoning: [`docs/architecture.md`](docs/architecture.md),
 ```
 .
 ├── src/agent/                 # Reference agent (vendored, unchanged)
-├── tests/                     # Vendored smoke test
+├── tests/                     # Smoke test (CI gate)
 ├── Dockerfile, pyproject.toml # Vendored build
 ├── terraform/
 │   ├── bootstrap/             # Remote state (S3 + DynamoDB lock) — apply once
-│   ├── global/                # ECR repo + GitHub OIDC provider (account-wide)
 │   ├── modules/               # Reusable, composable modules
 │   │   ├── network/           #   VPC, subnets, NAT, VPC endpoints (Bedrock/S3/...)
 │   │   ├── eks/               #   Cluster, Pod Identity, KMS logs, system nodes
@@ -54,11 +53,11 @@ Full diagram + reasoning: [`docs/architecture.md`](docs/architecture.md),
 │   │   ├── agent-identity/    #   Least-priv Pod Identity role for the agent SA
 │   │   ├── observability/     #   CloudWatch dashboards + alarms + SNS
 │   │   └── bastion/           #   SSM-only bastion for the private API endpoint
-│   └── environments/          # dev / staging / prod roots (separate state)
+│   └── environments/          # dev / prod roots (separate state)
 ├── deploy/
 │   └── chart/underwriting-agent/  # Helm chart for the agent
-├── .github/workflows/         # ci.yml (lint/test/build+GHCR/validate/scan) + cd.yml (OIDC deploy)
-└── docs/                      # DESIGN, RUNBOOK, COST, COMPLIANCE, AI-USAGE, diagrams
+├── .github/workflows/         # ci.yml (lint/test/build/validate/scan) + cd.yml (build+push GHCR, promote)
+└── docs/                      # DEPLOYMENT, DESIGN, RUNBOOK, COST, COMPLIANCE, AI-USAGE, diagrams
 ```
 
 ## Quick start
@@ -82,6 +81,12 @@ make tf-fmt tf-validate tf-security
 cd terraform/bootstrap && terraform init && terraform apply   # once per account
 make tf-plan ENV=dev
 ```
+
+### Deploy end to end
+The full Day-0 bootstrap order (Terraform → secrets → Argo CD → app), with every
+manual step called out, is in **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)**.
+Argo CD install + repo registration + root-app seed is scripted in
+[`scripts/bootstrap-argocd.sh`](scripts/bootstrap-argocd.sh).
 
 ## What maps to the spec
 

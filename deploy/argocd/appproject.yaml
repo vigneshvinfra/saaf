@@ -10,27 +10,20 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  description: Saaf underwriting-assist agent (dev/staging/prod)
+  description: Saaf underwriting-assist agent (dev/prod)
 
-  # Only this repo may be a source. No arbitrary Helm repos.
   sourceRepos:
     - https://github.com/<your-org>/saaf-underwriting-infra.git
 
-  # Only these namespaces, only on the named destination servers.
   destinations:
     - name: in-cluster
       server: https://kubernetes.default.svc
       namespace: uw-dev
     - name: in-cluster
       server: https://kubernetes.default.svc
-      namespace: uw-staging
-    - name: in-cluster
-      server: https://kubernetes.default.svc
       namespace: uw-prod
 
-  # Cluster-scoped resources are NOT permitted from this project — the agent
-  # only ever creates namespaced objects. (Platform CRDs/controllers are owned
-  # by a separate platform project.)
+  # Cluster-scoped resources are NOT permitted from this project — the agent only ever creates namespaced objects.
   clusterResourceWhitelist: []
 
   namespaceResourceWhitelist:

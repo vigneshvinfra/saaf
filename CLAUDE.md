@@ -18,9 +18,9 @@ unchanged** — do not modify it; deploy and operate it.
   to exact ARNs; no `*` resources.
 
 ## Layout
-- `terraform/bootstrap` — remote state (apply once). `terraform/global` — ECR +
-  GitHub OIDC. `terraform/modules/stack` — composes everything; env roots
-  (`environments/{dev,staging,prod}`) just call it with per-env sizing.
+- `terraform/bootstrap` — remote state (apply once). `terraform/modules/stack` —
+  composes everything; env roots (`environments/{dev,prod}`) just call it with
+  per-env sizing. Images are published to GHCR by CI (no ECR/registry in TF).
 - `deploy/chart/underwriting-agent` — Helm chart (+ `values-<env>.yaml`).
 - `deploy/argocd` — AppProject + ApplicationSet + root app. `deploy/platform` —
   Karpenter NodePool + PrometheusRule (GitOps).
@@ -47,4 +47,4 @@ make test                                           # pytest
 
 ## Models
 When wiring LLM config: prod uses **Bedrock** (`anthropic.claude-sonnet-4-6-v1:0`)
-via PrivateLink; dev/staging use the **Anthropic API** key from Secrets Manager.
+via PrivateLink; dev uses the **Anthropic API** key from Secrets Manager.

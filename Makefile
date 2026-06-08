@@ -44,7 +44,7 @@ tf-validate: ## init (no backend) + validate every environment and module
 	@./scripts/tf-validate-all.sh
 
 .PHONY: tf-plan
-tf-plan: ## terraform plan for ENV=dev|staging|prod
+tf-plan: ## terraform plan for ENV=dev|prod
 	cd $(TF_DIR) && terraform init && terraform plan
 
 .PHONY: tf-security

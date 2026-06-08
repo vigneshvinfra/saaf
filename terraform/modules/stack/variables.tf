@@ -1,4 +1,4 @@
-# The full per-environment stack. Each environment root (dev/staging/prod) calls
+# The full per-environment stack. Each environment root (dev/prod) calls
 # this module with env-specific sizing/toggles, so the composition lives in one
 # place and the env roots stay tiny.
 
@@ -8,7 +8,7 @@ variable "name" {
 }
 
 variable "environment" {
-  description = "dev | staging | prod."
+  description = "dev | prod."
   type        = string
 }
 

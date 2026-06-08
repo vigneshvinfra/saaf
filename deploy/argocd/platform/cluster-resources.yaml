@@ -1,0 +1,40 @@
+# Karpenter NodePool/EC2NodeClass and PrometheusRule 
+# Runs at sync-wave 1 so the controllers from wave 0 are already installed and healthy before these apply.
+#
+# Substitute <CLUSTER_NAME> and <KARPENTER_NODE_ROLE> from `terraform output`
+# (stack outputs: cluster_name, karpenter_node_role_name).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-resources
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/<your-org>/saaf-underwriting-infra.git
+    targetRevision: main
+    path: deploy/platform/cluster-resources
+    helm:
+      values: |
+        clusterName: <CLUSTER_NAME>
+        karpenterNodeRole: <KARPENTER_NODE_ROLE>
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring # PrometheusRule lands here; the Karpenter CRs are cluster-scoped
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5 # absorb any residual CRD-then-CR ordering race
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 3m

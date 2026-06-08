@@ -1,12 +1,5 @@
-# ApplicationSet — fans out one Argo Application per environment from a single
-# definition. dev + staging auto-sync (self-healing); prod is manual so a human
-# approves the rollout (this is the prod gate, paired with the CI image-tag PR).
-#
-# Note on the conditional sync policy: ApplicationSet parses `spec.template`
-# into a typed Application struct, so Go `{{if}}` control flow can't live inside
-# it. The per-env "automated vs manual" difference is therefore expressed via
-# `templatePatch`, which is rendered as raw text (full Go templating) and
-# strategically merged onto the generated Application.
+# ApplicationSet — fans out one Argo Application per environment from a single  definition. 
+# dev auto-syncs (self-healing); prod is manual so a human
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -20,10 +13,6 @@ spec:
         elements:
           - env: dev
             namespace: uw-dev
-            server: https://kubernetes.default.svc
-            autoSync: "true"
-          - env: staging
-            namespace: uw-staging
             server: https://kubernetes.default.svc
             autoSync: "true"
           - env: prod

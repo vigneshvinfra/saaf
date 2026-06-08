@@ -2,44 +2,44 @@
 # stack). The first rule is the runbook's headline incident: LLM-driven p95
 # breach. Metric names assume the OpenTelemetry FastAPI instrumentation the agent
 # ships with, exported to Prometheus (http_server_duration_milliseconds_*).
+# Namespace is the chart release namespace (monitoring).
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: underwriting-agent-slo
-  namespace: monitoring
   labels:
-    release: kube-prometheus-stack
+    release: {{ .Values.prometheus.releaseLabel }}
 spec:
   groups:
     - name: underwriting-agent.slo
       rules:
-        # ---- p95 end-to-end latency SLO (< 5s target) --------------------
+        # ---- p95 end-to-end latency SLO ----------------------------------
         - alert: AgentP95LatencyHigh
           expr: |
             histogram_quantile(0.95,
               sum by (le) (rate(http_server_duration_milliseconds_bucket{service="underwriting-agent"}[5m]))
-            ) > 5000
+            ) > {{ .Values.prometheus.p95LatencyMillis }}
           for: 10m
           labels:
             severity: page
           annotations:
-            summary: "Underwriting agent p95 latency > 5s"
-            description: "p95 end-to-end latency has exceeded the 5s SLO for 10m. Almost always upstream LLM latency."
-            runbook_url: "https://github.com/<your-org>/saaf-underwriting-infra/blob/main/docs/RUNBOOK.md"
+            summary: "Underwriting agent p95 latency high"
+            description: "p95 end-to-end latency has exceeded the SLO for 10m. Almost always upstream LLM latency."
+            runbook_url: "{{ .Values.prometheus.runbookUrl }}"
 
         # ---- LLM error / timeout rate ------------------------------------
         - alert: AgentLLMErrorRateHigh
           expr: |
             sum(rate(http_server_duration_milliseconds_count{service="underwriting-agent",http_status_code="502"}[5m]))
             /
-            sum(rate(http_server_duration_milliseconds_count{service="underwriting-agent"}[5m])) > 0.05
+            sum(rate(http_server_duration_milliseconds_count{service="underwriting-agent"}[5m])) > {{ .Values.prometheus.llmErrorRatio }}
           for: 5m
           labels:
             severity: page
           annotations:
-            summary: "Agent LLM call failure rate > 5%"
-            description: ">5% of requests are returning 502 (LLM call failed). See RUNBOOK.md."
-            runbook_url: "https://github.com/<your-org>/saaf-underwriting-infra/blob/main/docs/RUNBOOK.md"
+            summary: "Agent LLM call failure rate high"
+            description: "Too many requests are returning 502 (LLM call failed). See RUNBOOK.md."
+            runbook_url: "{{ .Values.prometheus.runbookUrl }}"
 
         # ---- availability ------------------------------------------------
         - alert: AgentNoReadyPods

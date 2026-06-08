@@ -51,7 +51,7 @@ jobs:
       - uses: azure/setup-helm@v4
       - name: lint + template every env
         run: |
-          for env in dev staging prod; do
+          for env in dev prod; do
             helm lint deploy/chart/underwriting-agent -f deploy/chart/underwriting-agent/values-$env.yaml
             helm template ua deploy/chart/underwriting-agent -f deploy/chart/underwriting-agent/values-$env.yaml >/dev/null
           done

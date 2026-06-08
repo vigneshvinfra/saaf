@@ -9,14 +9,15 @@ note records *how* it was used and, more importantly, where its suggestions were
 - **Repo + spec ingestion:** read the service spec PDF and the skeleton agent
   repo, extracted the runtime contract (endpoints, env config, store/LLM
   interfaces) and the compliance/SLO requirements.
-- **Reused my prior work:** pointed it at my existing `~/TF` EKS setup and asked
+- **Used my prior experience & judgement:** pointed it at my existing `~/TF` EKS setup and asked
   it to lift the proven patterns (EKS module 20.x, **EKS Pod Identity**,
   KMS-encrypted control-plane logs, private endpoint + SSM bastion, Secrets Store
   CSI, gp3) into a properly modular layout.
 - **Module + manifest authoring:** generated the Terraform modules, the Helm
-  chart, the Argo CD manifests, the CI/CD workflows, and these docs — each
-  validated as it went (`terraform validate`, `helm lint/template`, `yq`, a real
-  `kind` deploy + smoke test).
+  chart, the Argo CD manifests (app + platform projects), the CI/CD workflows,
+  the Day-0 bootstrap guide (`docs/DEPLOYMENT.md` + `scripts/bootstrap-argocd.sh`),
+  and these docs — each validated as it went (`terraform validate`,
+  `helm lint/template`, `yq`).
 
 ## Where I corrected / overrode the AI (the important part)
 1. **Removed a speculative SQS + KEDA design.** The AI's first cut (and my own
@@ -41,14 +42,23 @@ note records *how* it was used and, more importantly, where its suggestions were
 5. **Resolved the DATABASE_URL ↔ RDS rotation tension** honestly — RDS-managed
    auto-rotating master secret + a documented follow-up Lambda, rather than
    pretending static creds rotate.
+6. **Cut speculative scope: dropped `terraform/global` and the `staging`
+   environment.** The AI's layout carried a `global` root and a third env that
+   added structure without earning it for this brief. I collapsed to
+   `bootstrap` + `dev`/`prod` — the minimum that still demonstrates per-env
+   sizing — same "don't ship complexity the spec didn't ask for" call as (1).
+7. **Made platform resources first-class GitOps.** Repackaged the loose Karpenter
+   NodePool + PrometheusRule manifests as an Argo-managed Helm chart
+   (`deploy/platform/cluster-resources`), so *everything* in-cluster flows through
+   Argo CD rather than a mix of `kubectl apply` and GitOps.
 
 ## What I verified myself (not taken on trust)
-- `terraform fmt -check` + `validate` across bootstrap, global, and all three
-  envs — green.
-- `helm lint` + `helm template` for local/dev/staging/prod — green.
-- Built the image and **deployed the agent to a local kind cluster via the
-  shipped chart**, then curled `/healthz` and `/v1/items/process` — real
-  structured action returned.
+- `terraform fmt -check` + `validate` across bootstrap and both envs
+  (`dev`/`prod`) — green.
+- `helm lint` + `helm template` for the agent chart (`dev`/`prod`) and the
+  platform `cluster-resources` chart — green.
+- `pytest` smoke suite (boots the app, exercises the mock agent path) — green.
+- Built the agent image (`docker build`) — green.
 
 ## Prompting style
 Short, iterative, review-heavy: generate one coherent slice → read it →

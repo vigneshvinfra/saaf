@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate every Terraform environment + the bootstrap/global configs without
+# Validate every Terraform environment + the bootstrap config without
 # touching a real backend or AWS account. Used by `make tf-validate` and CI.
 # `terraform validate` needs an initialized working dir but NOT credentials,
 # so we init with -backend=false.
@@ -12,9 +12,7 @@ fail=0
 
 targets=(
   terraform/bootstrap
-  terraform/global
   terraform/environments/dev
-  terraform/environments/staging
   terraform/environments/prod
 )
 

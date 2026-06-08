@@ -33,12 +33,6 @@ variable "flow_logs_retention_days" {
   default     = 90
 }
 
-variable "kms_key_arn" {
-  description = "KMS key ARN used to encrypt the flow log group. If null, a key is created."
-  type        = string
-  default     = null
-}
-
 variable "enable_bedrock_endpoint" {
   description = "Create the Bedrock runtime interface endpoint (prod LLM path via PrivateLink)."
   type        = bool

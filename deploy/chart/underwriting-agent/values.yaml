@@ -12,7 +12,7 @@ replicaCount: 2
 
 # ServiceAccount the pods run as. EKS Pod Identity (Terraform module
 # `agent-identity`) binds a least-privilege IAM role to this exact
-# namespace + name — so NO IRSA annotation is needed here.
+# namespace + name
 serviceAccount:
   create: true
   name: underwriting-agent
@@ -33,7 +33,7 @@ config:
 
 # Secret material via the Secrets Store CSI driver (AWS Secrets Manager).
 # Synced into a Kubernetes Secret consumed by the pod via envFrom.
-# Disabled locally (kind) where the mock LLM path needs no credentials.
+# Disabled for local runs where the mock LLM path needs no credentials.
 secrets:
   enabled: false
   region: us-east-1

@@ -3,9 +3,7 @@
 **Scope.** Deploy and operate the ML team's agent (vendored unchanged) on EKS,
 in a regulated financial-services posture. A narrow, well-architected slice:
 network → cluster → data → identity → delivery → observability. Not a real
-`apply`; the bar is *statically valid + secure + provably runnable* (CI is green,
-`tfsec` clean, and the agent really deploys to a kind cluster via the shipped
-Helm chart).
+`apply`; the bar is *statically valid + secure* (CI is green, `tfsec` clean).
 
 ## Key decisions & trade-offs
 
@@ -33,14 +31,14 @@ rotation, least-privilege per ServiceAccount. The agent role is scoped to exact
 ARNs (read docs, append-only audit, idempotency table, its own secrets, one
 Bedrock model, send-as one SES address) — no `*` resources.
 
-**Bedrock (prod) / Anthropic API (dev,staging).** Prod calls Bedrock over a
+**Bedrock (prod) / Anthropic API (dev).** Prod calls Bedrock over a
 PrivateLink endpoint: no internet egress for borrower data, IAM-auditable, no
 API key to rotate, no-training by default. Non-prod uses the Anthropic API (key
 in Secrets Manager) so the secret-rotation + egress path is also exercised.
 
 **GitOps delivery (Argo CD).** CI builds a tested, scanned image (`:<git-sha>`,
-ECR, pushed via GitHub OIDC — no static AWS keys) and commits the tag into
-`values-<env>.yaml`. Argo CD reconciles: dev/staging auto-sync, **prod is a
+pushed to GHCR with the built-in `GITHUB_TOKEN` — no static AWS keys) and commits the tag into
+`values-<env>.yaml`. Argo CD reconciles: dev auto-syncs, **prod is a
 manual sync gated by a GitHub Environment approval** — two independent gates on
 prod change.
 

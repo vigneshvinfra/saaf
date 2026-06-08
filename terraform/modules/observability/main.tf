@@ -3,7 +3,7 @@
 #
 # App-level SLOs (p95 end-to-end latency, 5xx rate, LLM error/timeout rate) are
 # emitted by the agent via OpenTelemetry into Prometheus and alerted on with a
-# PrometheusRule (deploy/platform/monitoring/) — that is where the runbook's
+# PrometheusRule (deploy/platform/cluster-resources/) — that is where the runbook's
 # "LLM latency spike" alert fires. CloudWatch covers the managed infra beneath.
 
 resource "aws_sns_topic" "alerts" {

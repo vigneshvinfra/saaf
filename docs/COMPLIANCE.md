@@ -47,8 +47,9 @@ All CMKs have `enable_key_rotation = true` (annual).
   address. No `*` resources, no broad service grants.
   → `modules/agent-identity/main.tf`
 - Platform identities (LB controller, EBS CSI, Karpenter) likewise scoped via
-  Pod Identity. CI uses GitHub **OIDC** roles (ECR-push / TF-plan) — no static
-  keys. → `modules/platform-addons`, `modules/karpenter`, `terraform/global`
+  Pod Identity. CI pushes images to GHCR using the workflow's built-in
+  `GITHUB_TOKEN` — no long-lived AWS keys. → `modules/platform-addons`,
+  `modules/karpenter`, `.github/workflows/cd.yml`
 
 ## Secret rotation (quarterly minimum)
 
@@ -62,7 +63,7 @@ All CMKs have `enable_key_rotation = true` (annual).
 ## No production data in non-prod
 
 - Separate state per env (recommended: separate AWS accounts via the per-env
-  roots). Dev uses synthetic data and `force_destroy=true`; staging/prod do not.
+  roots). Dev uses synthetic data and `force_destroy=true`; prod does not.
   Bedrock/Anthropic configured with no-training agreements. → `terraform/environments/*`
 
 ## Data residency / network isolation
@@ -86,4 +87,4 @@ All CMKs have `enable_key_rotation = true` (annual).
 
 - All infra change via Terraform (remote state + DynamoDB lock); all cluster
   change via Argo CD from git. Prod gated twice: GitHub Environment approval +
-  Argo CD manual sync. CI scans (`tfsec`, ECR scan-on-push, image SBOM/provenance).
+  Argo CD manual sync. CI scans (`tfsec`, Trivy image scan, image SBOM/provenance).
